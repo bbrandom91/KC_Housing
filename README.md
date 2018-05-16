@@ -1,7 +1,7 @@
 
 # Introduction
 
-We will be looking at a dataset of homes sold between May 2014 and May 2015 in King's County in Washington (not DC). Among the cities included is Seattle, the state's largest city. The goal is to predict home prices in the data. This is a work in progress, there's a lot more I want to do before I can call myself happy with what I've done.
+We will be looking at a dataset of homes sold between May 2014 and May 2015 in King's County in Washington (not DC). Among the cities included is Seattle, the state's largest city. The goal is to predict home prices in the data. A more thorough analysis can be found in the pdf above, which was done in R. I'm having trouble getting the markdown to show up since there are a lot of plots and hence the file is large.
 
 For reference, here are the features in the data:
 
