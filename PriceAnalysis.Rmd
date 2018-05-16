@@ -1,7 +1,6 @@
 ---
 title: "KC Housing Prices"
 output:
-  keep_md: yes
   html_notebook: default
   pdf_document: default
 ---
