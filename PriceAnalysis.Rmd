@@ -1,0 +1,244 @@
+---
+title: "KC Housing Prices"
+output:
+  keep_md: yes
+  html_notebook: default
+  pdf_document: default
+---
+#Introduction
+We will be looking at a dataset of homes sold between May 2014 and May 2015 in King's County in Washington (not DC). Among the cities included is Seattle, the state's largest city. The goal is to predict home prices in the data. This is a work in progress, there's a lot more I want to do before I can call myself happy with what I've done.
+```{r}
+library(tidyverse)
+```
+
+#Data Exploration and Feature Engineering
+```{r}
+kc <- read_csv("kc_house_data.csv")
+```
+
+
+```{r}
+spec(kc)
+```
+ID may not be too useful since it attains almost as many values as there are housing units. It might useful to know how many times a unit appears in this dataset and use that as a feature, but ID on its own isn't helpful. Date will probably be interesting; we could look for, say, seasonality trends. For now, though, let's not use it. I'm not entirely sure what view is doing... the Kaggle page just says "has been viewed," and I don't know what exactly that means. While zipcode is technically a number, for our purposes it would be better to treat it as a categorical variable. There are a lot of zipcodes, though, which means a lot more parameters in the model:
+
+```{r}
+cat("The number of zipcodes: ",length(unique(kc$zipcode)))
+```
+
+
+
+```{r}
+kc2 <- select(kc, -id,-date,-lat,-long)
+```
+
+About 60% of housing units have no basement:
+```{r}
+cat("Percentage of housing units with no basement: ",100*nrow(kc2[kc2$sqft_basement==0,])/nrow(kc2))
+```
+So, let's replace sqft_basement with a binary representing whether or not there is a basement. We will also  convert zipcode to a categorical.
+
+```{r}
+kc2$basement <- as.integer(kc2$sqft_basement==0)
+kc2$zipcode <- as.factor(kc2$zipcode)
+kc3 <- select(kc2,-sqft_basement)
+```
+
+```{r}
+kc3
+```
+Let's make some plots. Since prices span several decades, we should use log(price) in our plots.
+###Price versus bedrooms
+```{r}
+plot(kc3$bedrooms, log(kc3$price),xlab="# Bedrooms",ylab="log(price)", main="Log(price) versus # Bedrooms")
+```
+Wow, one of these houses has more than thirty bedrooms.
+```{r}
+max(kc3$bedrooms)
+```
+Who needs 33 bedrooms?!? Is this a hotel? Let's plot this again without this data point to see if there is a trend.
+```{r}
+plot(kc3$bedrooms[kc3$bedrooms<33], log(kc3$price[kc3$bedrooms<33]),xlab="# Bedrooms",ylab="log(price)", main="Log(price) versus # Bedrooms" )
+```
+It looks like it generally increases, although there is a lot of variance. Let's use a box plot:
+
+```{r}
+plot(as.factor(kc3$bedrooms), log(kc3$price),xlab="# Bedrooms",ylab="log(price)", main="Log(price) versus # Bedrooms" )
+```
+The trend is much clearer here.
+
+###Price versus bathrooms
+```{r}
+plot(as.factor(kc3$bathrooms), log(kc3$price),xlab="# Bathrooms",ylab="log(price)", main="Log(price) versus # Bathrooms")
+```
+###Price versus Square Foot Living Space
+```{r}
+plot(kc3$sqft_living, log(kc3$price),xlab="Square Foot Living",ylab="log(price)", main="Log(price) versus Square Foot Living")
+```
+We see that price does increase with square footage, but it doesn't quite look linear. Let's plot the log-price per square foot:
+
+```{r}
+plot(kc3$sqft_living, log(kc3$price)/kc3$sqft_living,xlab="Square Foot Living",ylab="Log(Price) Per Square Foot", main="Log(price) versus Square Foot Living")
+```
+Interesting. The price per square foot decreases with high square footage. I woud expect the opposite. From the shape of the plot, I think log(price)/sqft_living ~ 1/sqrt(sqft_living) => log(price)~sqrt(sqft_living). Let's see:  
+
+
+```{r}
+plot(sqrt(kc3$sqft_living), log(kc3$price),xlab="Square Foot Living",ylab="log(price)", main="Log(price) versus Square Foot Living")
+```
+This looks pretty linear, suggesting sqrt(sqft_living) is a good feature to use in the linear model. I expect the same holds for the other square footage units.
+
+###Price versus Floors
+```{r}
+plot(as.factor(kc3$floors), log(kc3$price),xlab="Number of Floors",ylab="Log(Price)",main="Log(Price) vs # Floors")
+```
+While there seems to be a trend, I think it's largely washed out by the fluctuation in prices within each floor.
+
+###Price versus Waterfront
+```{r}
+plot(as.factor(kc3$waterfront), log(kc3$price),xlab="?Waterfront",ylab="Log(Price)",main="Log(Price) vs Waterfront")
+```
+Housing units on the waterfront seem to overall cost more. Are they also larger? Let's look at sqrt(sqft_living) against waterfront:
+
+```{r}
+plot(as.factor(kc3$waterfront), sqrt(kc3$sqft_living),xlab="?Waterfront",ylab="sqrt(Living Space)",main="sqrt(Living Space) vs Waterfront")
+```
+It's hard to say for sure; from the plot it looks like homes on the waterfront are generally larger, but there is a lot variability.
+
+###Price versus View
+```{r}
+plot(as.factor(kc3$view), log(kc3$price),xlab="?View",ylab="Log(Price)",main="Log(Price) vs View")
+```
+
+###Price versus Condition
+```{r}
+plot(as.factor(kc3$condition), log(kc3$price),xlab="Condition",ylab="Log(Price)",main="Log(Price) vs Condition")
+```
+It looks like rather than all the conditions being individually useful, dividing it by condition > 2 and condition < 3 is better.
+
+```{r}
+
+plot(as.factor(kc3$condition>2),
+     log(kc3$price),xlab="?Condition>2",ylab="Log(Price)",main="Log(Price) vs Condition")
+```
+
+###Price versus Grade
+```{r}
+plot(as.factor(kc3$grade), log(kc3$price),xlab="Grade",ylab="Log(Price)",main="Log(Price) vs Grade")
+```
+
+I think it's clear housing units with high grades have higher prices.
+
+###Price versus Year Built
+```{r}
+plot(kc3$yr_built, log(kc3$price),xlab="Year Built",ylab="Log(Price)",main="Log(Price) vs Year Built")
+```
+
+It's hard to establish much of a relationship year.
+
+###Price versus Year Renovated
+```{r}
+plot(kc3$yr_renovated, log(kc3$price),xlab="Year Renovated",ylab="Log(Price)",main="Log(Price) vs Year Renovated")
+```
+A significant fraction of the points have yr_renovated = 0, we need to plot without it:
+```{r}
+plot(kc3$yr_renovated[kc3$yr_renovated>0], log(kc3$price[kc3$yr_renovated>0]),xlab="Year Renovated",ylab="Log(Price)",main="Log(Price) vs Year Renovated")
+```
+
+Let's see if simply being renovated is related to price:
+
+```{r}
+plot(as.factor(kc3$yr_renovated>0), log(kc3$price),xlab="?Renovated",ylab="Log(Price)",main="Log(Price) vs ?Renovated")
+```
+
+
+###Price versus Zip Code
+```{r}
+plot(as.factor(kc3$zipcode), log(kc3$price),xlab="Zip Code",ylab="Log(Price)",main="Log(Price) vs Zip Code")
+```
+
+The only sort of trend we might expect is that prices vary across different ZIP codes, which we do see.
+
+###Price versus Basement
+```{r}
+plot(as.factor(kc3$basement>0), log(kc3$price),xlab="?Basement",ylab="Log(Price)",main="Log(Price) vs Presence of basement")
+```
+
+It looks like homes with basements actually tend to cost less, but the effect is washed out by variability in prices.
+
+
+# Modelling the data
+Since housing prices range over several decades, we will take a log of prices and use a linear model.
+```{r}
+fit1 = lm(log(price)~.,data=kc3)
+```
+
+```{r}
+summary(fit1)
+```
+
+
+```{r}
+plot(fit1)
+```
+We have an r^2 of about 87%. Let's modify the model a bit by adding some features, treating condition and floors as factors, and we'll remove sqft_lot_15.
+```{r}
+fit2 = update(fit1,log(price)~.+sqrt(sqft_living)+sqrt(sqft_lot)+sqrt(sqft_above)-sqft_lot15+as.factor(floors)-floors-condition+as.factor(condition)+sqrt(sqft_living15 ),data=kc3)
+summary(fit2)
+```
+
+```{r}
+plot(fit2)
+```
+To make sure this model isn't overfitting, we will break up the data into a training subset and a test subset.
+```{r}
+smp_size <- floor(0.8 * nrow(kc3))
+set.seed(1)
+train_ind <- sample(seq_len(nrow(kc3)), size = smp_size)
+train <- kc3[train_ind, ]
+test <- kc3[-train_ind, ]
+
+fit2.2 <- update(fit2, data=train)
+```
+
+```{r}
+summary(fit2.2)
+```
+Let's evaluate the performance by looking at r^2 and RSS.
+```{r}
+RSS.train <- sum((predict(fit2.2,train) - log(train$price) )^2 )
+TSS.train <- sum((mean(log(train$price)) - log(train$price) )^2) 
+cat("R-squared for train data: ",1-RSS.train/TSS.train)
+```
+
+
+```{r}
+RSS.test <- sum((predict(fit2.2,test) - log(test$price) )^2 )
+TSS.test <- sum((mean(log(test$price)) - log(test$price) )^2) 
+cat("R-squared for test data: ",1-RSS.test/TSS.test)
+```
+```{r}
+RSS.total <- sum((predict(fit2.2,kc3) - log(kc3$price) )^2 )
+TSS.total <- sum((mean(log(kc3$price)) - log(kc3$price) )^2) 
+cat("R-squared for all data: ",1-RSS.total/TSS.total)
+```
+
+
+```{r}
+cat("RMS for all data: ",sqrt(mean((predict(fit2.2,kc3) - log(kc3$price) )^2 )))
+```
+
+The model is performing well with an R-squared of about 88% for all the data as well as the training and test subsets. Our mean squared error is about 0.18. Since we predicted the log of price, we exponentiate our prediction to get actual price, and our error becomes multiplicative, i.e. exp(log(price)+-RMSE) = exp(+-RMSE)*price. Since exp(+RMSE) is about 1.2 and exp(-RMSE) is about 0.84, we're overestimating or underestimating price by about 20% on average.
+
+```{r}
+exp(-0.18)
+```
+
+
+
+
+
+
+
+
+
